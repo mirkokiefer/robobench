@@ -36,18 +36,41 @@ def label(im: np.ndarray, text: str, scale: float = 0.9) -> np.ndarray:
     return out
 
 
-def diff_heat(a: np.ndarray, b: np.ndarray, threshold: int = 25,
-              amplify: float = 3.0) -> np.ndarray:
-    """Highlight pixels that changed between a and b in red."""
-    A = np.asarray(a, dtype=np.int16)
-    B = np.asarray(b, dtype=np.int16)
-    d = np.abs(A - B).max(axis=2)
-    d = np.clip(d.astype(np.float32) * amplify, 0, 255).astype(np.uint8)
-    mask = d > threshold
-    base = (np.asarray(a) * 0.45).astype(np.uint8)
+def diff_heat(a: np.ndarray, b: np.ndarray, threshold: int = 30,
+              blur: int = 3, min_blob_px: int = 80) -> np.ndarray:
+    """Highlight pixels that changed between a and b in red.
+
+    Robust to JPEG / sensor / stripe noise:
+      - both inputs are gaussian-blurred before differencing
+      - per-pixel max-channel delta is thresholded
+      - mask is opened (kill speckle) then closed (fill seams)
+      - connected components smaller than min_blob_px are dropped
+
+    The base image (`a`) is darkened so the red overlay pops.
+    """
+    if blur:
+        a_b = cv2.GaussianBlur(a, (0, 0), blur)
+        b_b = cv2.GaussianBlur(b, (0, 0), blur)
+    else:
+        a_b, b_b = a, b
+    d = np.abs(a_b.astype(np.int16) - b_b.astype(np.int16)).max(axis=2).astype(np.uint8)
+    mask = (d > threshold).astype(np.uint8) * 255
+
+    # morphology: kill speckle, then fill small gaps
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  np.ones((3, 3), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+
+    # drop tiny connected components (residual noise)
+    n, lbl, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    keep = np.zeros_like(mask, dtype=bool)
+    for i in range(1, n):
+        if stats[i, cv2.CC_STAT_AREA] >= min_blob_px:
+            keep |= (lbl == i)
+
+    base = (a.astype(np.float32) * 0.40).astype(np.uint8)
     heat = np.zeros_like(base)
-    heat[mask] = [80, 80, 255]   # BGR — red in OpenCV
-    return np.where(mask[..., None], heat, base)
+    heat[keep] = [80, 80, 255]   # BGR — red
+    return np.where(keep[..., None], heat, base)
 
 
 def diff_anaglyph(a: np.ndarray, b: np.ndarray) -> np.ndarray:

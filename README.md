@@ -118,22 +118,29 @@ during the demo run — raise `--max-step` to 3°+ to converge in 3–4 iters.
 
 ### What moved
 
-The same start vs end frames as a motion overlay (red = pixels that changed):
+A clean motion overlay produced from a +5° `shoulder_pan` nudge — the
+arm is the only thing that moved, so red highlights *exactly* the swept
+volume of the gripper (the rest of the scene stays grey):
 
 ![motion](docs/servo_diff_heat.jpg)
 
-…and as a cyan/red anaglyph (start = cyan, end = red, static parts overlap into grey):
+…and as a cyan/red anaglyph (start = cyan, end = red, static parts
+overlap into grey):
 
 ![anaglyph](docs/servo_diff_anaglyph.jpg)
 
-Both produced by `scripts/make_diff_images.py` from `iter0.jpg` and
-`iter6.jpg`:
+Both produced by `scripts/make_diff_images.py`:
 
 ```bash
-python scripts/make_diff_images.py /tmp/servo/iter0.jpg /tmp/servo/iter6.jpg \
+python scripts/make_diff_images.py BEFORE.jpg AFTER.jpg \
     --out docs --prefix servo \
-    --label-before "BEFORE  iter 0" --label-after "AFTER   iter 6"
+    --label-before "BEFORE  pan = 92.4°" \
+    --label-after  "AFTER   pan = 97.0°  (+5° nudge)"
 ```
+
+The heat function blurs both inputs, thresholds the per-pixel max-channel
+delta, then opens/closes the mask and drops connected components below
+80 px to suppress JPEG / sensor / MJPEG-tear noise.
 
 The trajectory grid above is built the same way:
 
